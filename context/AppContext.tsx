@@ -1,76 +1,102 @@
-import React, { createContext, useContext, useState } from 'react';
-
-interface DiaryEntry {
-  mood: string;
-  text: string;
-}
-
-interface DiaryEntries {
-  [dateStr: string]: DiaryEntry;
-}
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface AppContextType {
-  entries: DiaryEntries;
-  addEntry: (dateStr: string, mood: string, text: string) => void;
   isAuthenticated: boolean;
-  setIsAuthenticated: (auth: boolean) => void;
   userName: string;
-  userPhoto: string | null;
-  login: (email: string, password: string) => void;
-  logout: () => void;
-  updateProfile: (newName: string, newPhoto: string | null) => void;
+  userPhoto: string;
+  entries: { [key: string]: { mood: string; text: string } };
+  login: (email: string, pass: string, name?: string) => Promise<void>;
+  logout: () => Promise<void>;
+  updateProfile: (name: string, photo: string) => Promise<void>;
+  addEntry: (date: string, mood: string, text: string) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  // Estados em memória RAM
-  const [entries, setEntries] = useState<DiaryEntries>({});
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true); // Iniciando como true para facilitar seus testes na Home
-  const [userName, setUserName] = useState<string>('Desenvolvedor');
-  const [userPhoto, setUserPhoto] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userName, setUserName] = useState('Usuário');
+  const [userPhoto, setUserPhoto] = useState('');
+  const [entries, setEntries] = useState<{ [key: string]: { mood: string; text: string } }>({});
 
-  // Login síncrono direto na memória
-  const login = (email: string, password: string) => {
-    const extractedName = email.split('@')[0];
-    const formatName = extractedName.charAt(0).toUpperCase() + extractedName.slice(1);
-    
-    setUserName(formatName);
-    setIsAuthenticated(true);
+  // 1. CARREGAR OS DADOS SALVOS ASSIM QUE O APP ABRE
+  useEffect(() => {
+    async function loadStoredData() {
+      try {
+        const storedAuth = await AsyncStorage.getItem('@apoia_mente:auth');
+        const storedName = await AsyncStorage.getItem('@apoia_mente:name');
+        const storedPhoto = await AsyncStorage.getItem('@apoia_mente:photo');
+        const storedEntries = await AsyncStorage.getItem('@apoia_mente:entries');
+
+        if (storedAuth === 'true') setIsAuthenticated(true);
+        if (storedName) setUserName(storedName);
+        if (storedPhoto) setUserPhoto(storedPhoto);
+        if (storedEntries) setEntries(JSON.parse(storedEntries));
+      } catch (error) {
+        console.error('Erro ao carregar dados persistentes:', error);
+      }
+    }
+    loadStoredData();
+  }, []);
+
+  // 2. FUNÇÃO DE LOGIN PERSISTENTE
+  const login = async (email: string, pass: string, name?: string) => {
+    try {
+      setIsAuthenticated(true);
+      await AsyncStorage.setItem('@apoia_mente:auth', 'true');
+      
+      if (name) {
+        setUserName(name);
+        await AsyncStorage.setItem('@apoia_mente:name', name);
+      }
+    } catch (error) {
+      console.error(error);
+    }
   };
 
-  // Logout síncrono
-  const logout = () => {
-    setIsAuthenticated(false);
-    setUserName('Usuário');
-    setUserPhoto(null);
+  // 3. FUNÇÃO DE LOGOUT (LIMPA OS DADOS DE SESSÃO)
+  const logout = async () => {
+    try {
+      setIsAuthenticated(false);
+      await AsyncStorage.removeItem('@apoia_mente:auth');
+      // Opcional: manter o nome e fotos locais ou limpar tudo com AsyncStorage.clear()
+    } catch (error) {
+      console.error(error);
+    }
   };
 
-  // Atualizar perfil na memória
-  const updateProfile = (newName: string, newPhoto: string | null) => {
-    setUserName(newName);
-    setUserPhoto(newPhoto);
+  // 4. ATUALIZAR PERFIL PERSISTENTE
+  const updateProfile = async (name: string, photo: string) => {
+    try {
+      setUserName(name);
+      setUserPhoto(photo);
+      await AsyncStorage.setItem('@apoia_mente:name', name);
+      await AsyncStorage.setItem('@apoia_mente:photo', photo);
+    } catch (error) {
+      console.error('Erro ao salvar perfil:', error);
+    }
   };
 
-  // Salvar registro no Diário instantaneamente
-  const addEntry = (dateStr: string, mood: string, text: string) => {
-    setEntries((prevEntries) => ({
-      ...prevEntries,
-      [dateStr]: { mood, text },
-    }));
+  // 5. ADICIONAR OU ATUALIZAR REFLEXÃO/HUMOR NO CALENDÁRIO
+  const addEntry = async (date: string, mood: string, text: string) => {
+    try {
+      const updatedEntries = {
+        ...entries,
+        [date]: { mood, text }
+      };
+      setEntries(updatedEntries);
+      // Salva a string JSON das reflexões no armazenamento do celular
+      await AsyncStorage.setItem('@apoia_mente:entries', JSON.stringify(updatedEntries));
+    } catch (error) {
+      console.error('Erro ao salvar nova reflexão:', error);
+    }
   };
 
   return (
-    <AppContext.Provider value={{ 
-      entries, 
-      addEntry, 
-      isAuthenticated, 
-      setIsAuthenticated, 
-      userName, 
-      userPhoto, 
-      login, 
-      logout,
-      updateProfile 
+    <AppContext.Provider value={{
+      isAuthenticated, userName, userPhoto, entries,
+      login, logout, updateProfile, addEntry
     }}>
       {children}
     </AppContext.Provider>
@@ -79,8 +105,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
 export function useApp() {
   const context = useContext(AppContext);
-  if (!context) {
-    throw new Error('useApp deve ser utilizado obrigatoriamente dentro de um AppProvider');
-  }
+  if (!context) throw new Error('useApp deve ser usado dentro de um AppProvider');
   return context;
 }

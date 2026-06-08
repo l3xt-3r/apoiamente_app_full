@@ -1,14 +1,41 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView, TextInput, TouchableOpacity, Image, Animated, Pressable, Linking, Dimensions, Alert } from 'react-native';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { StyleSheet, Text, View, ScrollView, TextInput, TouchableOpacity, Image, Animated, Pressable, Linking, Dimensions, Alert, Modal } from 'react-native';
 import { useApp } from '../../context/AppContext';
 import { useRouter } from 'expo-router';
-import { Wind, Flower, PhoneCall, BookOpen, UserPlus, LogIn, ChevronRight, ChevronLeft, ChevronDown, User, Feather, Play, Square, RefreshCw, Camera } from 'lucide-react-native';
+import { Wind, Flower, PhoneCall, BookOpen, UserPlus, LogIn, ChevronRight, ChevronLeft, ChevronDown, User, Play, Square, RefreshCw, Camera, X } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { Calendar, LocaleConfig } from 'react-native-calendars';
+
+// Configuração para o calendário rodar em Português
+LocaleConfig.locales['pt-br'] = {
+  monthNames: ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'],
+  monthNamesShort: ['Jan.','Fev.','Mar.','Abr.','Mai.','Jun.','Jul.','Ago.','Set.','Out.','Nov.','Dez.'],
+  dayNames: ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'],
+  dayNamesShort: ['Dom.','Seg.','Ter.','Qua.','Qui.','Sex.','Sáb.'],
+  today: 'Hoje'
+};
+LocaleConfig.defaultLocale = 'pt-br';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
+// Definição das cores associadas a cada estado de humor
+const moodColors: { [key: string]: string } = {
+  calmo: '#22C55E',   // Verde
+  neutro: '#94A3B8',  // Cinza
+  ansioso: '#F59E0B', // Laranja
+  triste: '#3B82F6',  // Azul
+};
+
+// Dicionário auxiliar para mapear emojis e labels no Modal
+const moodDetails: { [key: string]: { label: string; emoji: string } } = {
+  calmo: { label: 'Calmo', emoji: '🍃' },
+  neutro: { label: 'Neutro', emoji: '😐' },
+  ansioso: { label: 'Ansioso', emoji: '⚡' },
+  triste: { label: 'Triste', emoji: '😢' },
+};
+
 export default function HomeScreen() {
-  const { isAuthenticated, userName, userPhoto, login, logout, updateProfile } = useApp();
+  const { isAuthenticated, userName, userPhoto, login, logout, updateProfile, entries } = useApp();
   const router = useRouter();
   
   // Estados de Autenticação
@@ -36,11 +63,60 @@ export default function HomeScreen() {
   const [isBreathActive, setIsBreathActive] = useState(false);
   const breathIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Estados do Modal de Humor do Calendário
+  const [isMoodModalVisible, setIsMoodModalVisible] = useState(false);
+  const [selectedDate, setSelectedDate] = useState('');
+
   // Valores Animados Nativos
   const slideLeftAnim = useRef(new Animated.Value(-320)).current;
   const slideBottomAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const breathCircleScale = useRef(new Animated.Value(1)).current;
+
+  // Mapeamento corrigido com customStyles para pintar o fundo do dia com a cor do humor
+  const markedDates = useMemo(() => {
+    const marked: any = {};
+    if (!entries) return marked;
+
+    Object.keys(entries).forEach((date) => {
+      const userMood = entries[date]?.mood;
+      if (userMood && moodColors[userMood]) {
+        marked[date] = { 
+          customStyles: {
+            container: {
+              backgroundColor: moodColors[userMood],
+              borderRadius: 18,
+              justifyContent: 'center',
+              alignItems: 'center',
+              width: 32,
+              height: 32,
+            },
+            text: {
+              color: '#FFFFFF',
+              fontWeight: '700',
+            }
+          }
+        };
+      }
+    });
+    return marked;
+  }, [entries]);
+
+  // Função para lidar com o clique no dia do calendário
+  const handleDayPress = (day: any) => {
+    const dateString = day.dateString;
+    if (entries && entries[dateString]) {
+      setSelectedDate(dateString);
+      setIsMoodModalVisible(true);
+    }
+  };
+
+  // Conversor de data (AAAA-MM-DD para DD/MM/AAAA)
+  const formatDateString = (dateStr: string) => {
+    if (!dateStr) return '';
+    const [year, month, day] = dateStr.split('-');
+    return `${day}/${month}/${year}`;
+  };
 
   // Sincroniza estados de edição quando o perfil abre com os dados do Contexto
   useEffect(() => {
@@ -189,7 +265,7 @@ export default function HomeScreen() {
               if(isRegistering && name) {
                 await updateProfile(name, '');
               }
-              await login(email, password); 
+              await login(email, password, isRegistering ? name : undefined); 
             }
           }}>
             <Text style={styles.authBtnText}>{isRegistering ? 'criar conta' : 'entrar no espaço'}</Text>
@@ -205,6 +281,10 @@ export default function HomeScreen() {
       </View>
     );
   }
+
+  // Captura os dados do dia selecionado para exibir no Modal
+  const currentModalEntry = entries && selectedDate ? entries[selectedDate] : null;
+  const currentMoodInfo = currentModalEntry?.mood ? moodDetails[currentModalEntry.mood] : null;
 
   return (
     <View style={styles.wrapper}>
@@ -340,6 +420,45 @@ export default function HomeScreen() {
         </Animated.View>
       )}
 
+      {/* MODAL DO CALENDÁRIO */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={isMoodModalVisible}
+        onRequestClose={() => setIsMoodModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalDateText}>{formatDateString(selectedDate)}</Text>
+              <TouchableOpacity onPress={() => setIsMoodModalVisible(false)} style={styles.modalCloseBtn}>
+                <X size={18} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            {currentModalEntry && currentMoodInfo && (
+              <View style={styles.modalBody}>
+                <View style={styles.modalMoodBadgeRow}>
+                  <View style={[styles.modalMoodBadge, { backgroundColor: moodColors[currentModalEntry.mood] }]}>
+                    <Text style={styles.modalMoodEmoji}>{currentMoodInfo.emoji}</Text>
+                    <Text style={styles.modalMoodText}>{currentMoodInfo.label}</Text>
+                  </View>
+                </View>
+
+                {currentModalEntry.note ? (
+                  <ScrollView style={styles.modalNoteScrollView} showsVerticalScrollIndicator={false}>
+                    <Text style={styles.modalNoteTitle}>Suas notas reflexivas:</Text>
+                    <Text style={styles.modalNoteTextContent}>"{currentModalEntry.note}"</Text>
+                  </ScrollView>
+                ) : (
+                  <Text style={styles.modalNoNoteText}>Nenhum pensamento adicional foi escrito neste dia.</Text>
+                )}
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
+
       {/* BARRA SUPERIOR */}
       <View style={styles.topBar}>
         <TouchableOpacity style={styles.profileTrigger} onPress={openProfileDrawer}>
@@ -370,12 +489,41 @@ export default function HomeScreen() {
           </View>
           <ChevronRight size={16} color="#94A3B8" />
         </TouchableOpacity>
+
+        {/* Bloco do Calendário de Humor */}
+        <Text style={[styles.blockTitle, { marginTop: 30 }]}>rastreador de humor</Text>
+        <View style={styles.calendarCard}>
+          <Calendar
+            markingType={'custom'}
+            markedDates={markedDates}
+            onDayPress={handleDayPress}
+            theme={{
+              todayTextColor: '#E11D48',
+              dayTextColor: '#1E293B',
+              monthTextColor: '#1E293B',
+              textDayFontWeight: '500',
+              textMonthFontWeight: '700',
+              backgroundColor: '#FFF',
+              calendarBackground: '#FFF',
+            }}
+          />
+          {/* Legenda de Cores */}
+          <View style={styles.legendContainer}>
+            {Object.keys(moodColors).map(m => (
+              <View key={m} style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: moodColors[m] }]} />
+                <Text style={styles.legendText}>{m}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
       </ScrollView>
 
-      {/* BOTOES FLUTUANTES (FAB) */}
+      {/* FAB DO DIÁRIO */}
       <View style={styles.fabContainer}>
-        <TouchableOpacity style={styles.fabCircle} onPress={() => router.navigate('/diary')}>
-          <BookOpen size={24} color="#FFF" />
+        <TouchableOpacity style={styles.fabExtendedButton} onPress={() => router.navigate('/diary')}>
+          <BookOpen size={20} color="#FFF" />
+          <Text style={styles.fabExtendedText}>diário</Text>
         </TouchableOpacity>
       </View>
 
@@ -390,7 +538,7 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   wrapper: { flex: 1, backgroundColor: '#FAF9F6' },
-  content: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 180 },
+  content: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 220 },
   topBar: { paddingHorizontal: 24, paddingTop: 60, paddingBottom: 16, flexDirection: 'row', alignItems: 'center' },
   profileTrigger: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   avatarMini: { width: 36, height: 36, borderRadius: 18 },
@@ -402,6 +550,12 @@ const styles = StyleSheet.create({
   sessionCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   sessionTitleText: { fontSize: 14, fontWeight: '500', color: '#1E293B' },
   
+  calendarCard: { backgroundColor: '#FFF', borderRadius: 20, borderWidth: 1, borderColor: '#E2E8F0', overflow: 'hidden', paddingBottom: 10, marginBottom: 20 },
+  legendContainer: { flexDirection: 'row', justifyContent: 'center', gap: 12, paddingVertical: 12, borderTopWidth: 1, borderTopColor: '#F1F5F9' },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendText: { fontSize: 10, color: '#64748B', textTransform: 'capitalize' },
+
   authWrapper: { flex: 1, backgroundColor: '#FAF9F6', justifyContent: 'center', padding: 24 },
   authCard: { width: '100%', maxWidth: 320, alignSelf: 'center' },
   authTitle: { fontSize: 32, fontWeight: '700', color: '#1E293B', textAlign: 'center', letterSpacing: -1 },
@@ -413,7 +567,9 @@ const styles = StyleSheet.create({
   toggleAuthText: { color: '#64748B', fontSize: 13, fontWeight: '500' },
 
   fabContainer: { position: 'absolute', bottom: 104, right: 24, zIndex: 99 },
-  fabCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#1E293B', justifyContent: 'center', alignItems: 'center', elevation: 4 },
+  fabExtendedButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1E293B', paddingVertical: 14, paddingHorizontal: 20, borderRadius: 28, gap: 8, elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 3 },
+  fabExtendedText: { color: '#FFF', fontSize: 13, fontWeight: '600', textTransform: 'lowercase' },
+  
   emergencyFabContainer: { position: 'absolute', bottom: 32, right: 24, zIndex: 99 },
   emergencyFabCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#E11D48', justifyContent: 'center', alignItems: 'center', elevation: 4 },
 
@@ -458,5 +614,21 @@ const styles = StyleSheet.create({
   actionToggleActiveBtn: { backgroundColor: '#1E293B', paddingVertical: 14, paddingHorizontal: 32, borderRadius: 12 },
   actionToggleActiveBtnStop: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#FDA4AF' },
   actionToggleActiveText: { color: '#FFF', fontSize: 13, fontWeight: '600' },
-  actionToggleActiveTextStop: { color: '#E11D48' }
+  actionToggleActiveTextStop: { color: '#E11D48' },
+
+  // ESTILOS DO MODAL DO CALENDÁRIO
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  modalCard: { backgroundColor: '#FAF9F6', width: '100%', maxWidth: 320, borderRadius: 24, padding: 20, borderWidth: 1, borderColor: '#E2E8F0', elevation: 5 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderBottomWidth: 1, borderBottomColor: '#E2E8F0', paddingBottom: 10 },
+  modalDateText: { fontSize: 11, fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 1 },
+  modalCloseBtn: { padding: 4 },
+  modalBody: { gap: 16 },
+  modalMoodBadgeRow: { alignItems: 'flex-start' },
+  modalMoodBadge: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, gap: 6 },
+  modalMoodEmoji: { fontSize: 16 },
+  modalMoodText: { fontSize: 12, fontWeight: '700', color: '#FFF', textTransform: 'lowercase' },
+  modalNoteScrollView: { maxHeight: 120, width: '100%' },
+  modalNoteTitle: { fontSize: 12, fontWeight: '600', color: '#64748B', marginBottom: 6 },
+  modalNoteTextContent: { fontSize: 14, color: '#1E293B', fontStyle: 'italic', lineHeight: 20 },
+  modalNoNoteText: { fontSize: 13, color: '#94A3B8', fontStyle: 'italic' }
 });
