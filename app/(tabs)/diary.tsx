@@ -6,11 +6,23 @@ import { Calendar as CalendarIcon, MessageSquare, LifeBuoy, Zap, Send, MapPin, E
 
 export default function DiaryScreen() {
   // Os dados agora vêm persistidos e seguros do Context global
+  // ... seus outros estados
+  const params = useLocalSearchParams();
+
+  // declarar o estado antes do useEffect para evitar uso antes da definição
+  const [subTab, setSubTab] = useState<'calendar' | 'chat' | 'support' | 'tips'>('calendar');
+
+  useEffect(() => {
+    // Se a tela for aberta com um parâmetro 'tab' na URL, muda a aba ativa automaticamente
+    const validTabs = ['calendar', 'chat', 'support', 'tips'] as const;
+    if (params.tab && validTabs.includes(params.tab as any)) {
+      setSubTab(params.tab as typeof validTabs[number]);
+    }
+  }, [params.tab]);
+
   const { entries, addEntry, isAuthenticated } = useApp();
   const router = useRouter();
   const { tab } = useLocalSearchParams<{ tab: string }>();
-  
-  const [subTab, setSubTab] = useState<'calendar' | 'chat' | 'support' | 'tips'>('calendar');
   
   const now = new Date();
   const currentMonth = now.getMonth();
@@ -328,13 +340,13 @@ export default function DiaryScreen() {
       <View style={styles.miniFloatBarContainer}>
         <View style={styles.miniFloatBar}>
           <TouchableOpacity style={styles.miniBarItem} onPress={() => router.push('/')}>
-            <Sliders size={14} color="#94A3B8" />
+            <Sliders size={14} color="#1E293B" />
             <Text style={styles.miniBarLabel}>Práticas</Text>
           </TouchableOpacity>
           <View style={styles.miniBarDivider} />
           <TouchableOpacity style={[styles.miniBarItem, styles.miniBarItemActive]}>
             <BookOpen size={14} color="#1E293B" />
-            <Text style={styles.miniBarLabelActive}>Reflexões</Text>
+            <Text style={styles.miniBarLabelActive}>Diário</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -404,7 +416,7 @@ const styles = StyleSheet.create({
   miniFloatBar: { flexDirection: 'row', backgroundColor: '#FFFFFF', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 30, borderWidth: 1, borderColor: '#E2E8F0', alignItems: 'center', gap: 16, elevation: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 6 },
   miniBarItem: { alignItems: 'center', minWidth: 60, flexDirection: 'row', gap: 6, opacity: 0.4 },
   miniBarItemActive: { opacity: 1 },
-  miniBarLabel: { fontSize: 11, color: '#94A3B8', fontWeight: '500' },
+  miniBarLabel: { fontSize: 11, color: '#1E293B', fontWeight: '500' },
   miniBarLabelActive: { fontSize: 11, color: '#1E293B', fontWeight: '600' },
   miniBarDivider: { width: 1, height: 16, backgroundColor: '#E2E8F0' },
   centerWrapper: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FAF9F6', padding: 24 },
