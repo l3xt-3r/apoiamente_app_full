@@ -24,7 +24,7 @@ O desenvolvimento do front-end e da lógica do aplicativo foi construído utiliz
 * **Framework Base:** Expo (~v55.0.0) & React Native (v0.83.6)
 * **Linguagem:** TypeScript (Configuração estrita para maior segurança do código)
 * **Navegação:** Expo Router (Navegação nativa baseada em arquivos por abas inferiores e pilhas)
-* **Persistência de Dados:** SQLite (Banco de dados local para salvar os registros no celular)
+* **Persistência de Dados:** @react-native-async-storage/async-storage (Banco de dados local para salvar os registros no celular)
 * **Componente Visual:** React Native Calendars (Renderização do histórico mensal de humor)
 * **Ícones:** Lucide React Native (Iconografia vetorial moderna e limpa)
 
